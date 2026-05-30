@@ -38,10 +38,19 @@
         }
         .percent-item { 
             background: #e0f2fe; 
-            padding: 5px 10px; 
+            padding: 8px 12px; 
             border-radius: 4px; 
             font-size: 14px; 
             color: #0369a1; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 70px;
+        }
+        .percent-item span {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 2px;
         }
         .control-panel { 
             display: flex; 
@@ -118,7 +127,7 @@
     </div>
 
     <div class="stats-board">
-        <h3>实时各项占比率</h3>
+        <h3>各单项独立成功率</h3>
         <div class="percentages" id="percentage-container">
             </div>
     </div>
@@ -148,8 +157,12 @@
             { key: 'gotStealed', label: '被抢断' }
         ];
 
+        // 修改为每个项目独立记录 success(+1) 和 fail(-1)
         let stats = {};
-        metrics.forEach(m => stats[m.key] = 0);
+        function initStats() {
+            metrics.forEach(m => stats[m.key] = { success: 0, fail: 0 });
+        }
+        initStats();
 
         // 初始化日期显示
         document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', { 
@@ -161,41 +174,52 @@
             const container = document.getElementById('controls-container');
             container.innerHTML = '';
             metrics.forEach(m => {
+                // 面板中间的数字只显示“成功”的次数
                 container.innerHTML += `
                     <div class="control-item">
                         <div class="item-name">${m.label}</div>
-                        <div class="item-value" id="val-${m.key}">${stats[m.key]}</div>
+                        <div class="item-value" id="val-${m.key}">${stats[m.key].success}</div>
                         <div class="btn-group">
-                            <button class="btn-minus" onclick="updateStat('${m.key}', -1)">-1</button>
-                            <button class="btn-plus" onclick="updateStat('${m.key}', 1)">+1</button>
+                            <button class="btn-minus" onclick="recordEvent('${m.key}', false)">-1</button>
+                            <button class="btn-plus" onclick="recordEvent('${m.key}', true)">+1</button>
                         </div>
                     </div>
                 `;
             });
         }
 
-        // 处理 +1 和 -1 的数据逻辑
-        function updateStat(key, delta) {
-            stats[key] += delta;
-            // 防止数据出现负数
-            if (stats[key] < 0) stats[key] = 0; 
-            document.getElementById(`val-${key}`).innerText = stats[key];
+        // 记录事件（true为+1成功，false为-1失败）
+        function recordEvent(key, isSuccess) {
+            if (isSuccess) {
+                stats[key].success += 1;
+            } else {
+                stats[key].fail += 1;
+            }
+            // 列表主视图更新成功次数
+            document.getElementById(`val-${key}`).innerText = stats[key].success;
             updatePercentages();
         }
 
-        // 更新顶部百分比统计
+        // 更新顶部独立百分比统计
         function updatePercentages() {
             const container = document.getElementById('percentage-container');
-            let totalOperations = Object.values(stats).reduce((a, b) => a + b, 0);
-
-            if (totalOperations === 0) {
-                container.innerHTML = '<span style="color:#888;">发生统计动作后显示占比</span>';
-                return;
-            }
-
+            
             container.innerHTML = metrics.map(m => {
-                let percent = ((stats[m.key] / totalOperations) * 100).toFixed(1);
-                return `<div class="percent-item">${m.label}: ${percent}%</div>`;
+                let s = stats[m.key].success;
+                let f = stats[m.key].fail;
+                let total = s + f;
+                
+                // 计算百分比，如果总数为0则显示0%
+                let percent = total === 0 ? "0.0" : ((s / total) * 100).toFixed(1);
+                
+                // 显示格式：进球 (换行) 50.0% (换行) (1/2)
+                return `
+                    <div class="percent-item">
+                        <strong>${m.label}</strong>
+                        ${percent}% 
+                        <span>(${s}/${total})</span>
+                    </div>
+                `;
             }).join('');
         }
 
@@ -203,38 +227,41 @@
         function triggerReset() {
             if (confirm('【第一次确认】确定要重置当前页面上的所有统计数据吗？')) {
                 if (confirm('【第二次确认】警告：点击确定将清零所有未保存的实时数据，此操作无法撤销。是否彻底重置？')) {
-                    metrics.forEach(m => stats[m.key] = 0);
+                    initStats();
                     renderControls();
                     updatePercentages();
                 }
             }
         }
 
-        // 保存到本地存储(历史记录)
+        // 保存到本地存储(历史记录) - 使用了新的存储键名 bball_stats_v2 以防冲突
         function saveHistory() {
-            let total = Object.values(stats).reduce((a, b) => a + b, 0);
-            if(total === 0) {
-                alert('当前没有数据，无需保存！');
+            // 检查是否有任何数据
+            let totalActions = 0;
+            metrics.forEach(m => totalActions += (stats[m.key].success + stats[m.key].fail));
+            
+            if(totalActions === 0) {
+                alert('当前没有任何操作记录，无需保存！');
                 return;
             }
 
-            let history = JSON.parse(localStorage.getItem('bball_stats_history') || '[]');
+            let history = JSON.parse(localStorage.getItem('bball_stats_v2') || '[]');
+            // 深度拷贝当前状态，防止后续重置影响历史记录
             let record = {
                 date: new Date().toLocaleString('zh-CN'),
-                data: { ...stats }
+                data: JSON.parse(JSON.stringify(stats))
             };
-            // 将最新记录插入到数组最前面
+            
             history.unshift(record);
-            localStorage.setItem('bball_stats_history', JSON.stringify(history));
+            localStorage.setItem('bball_stats_v2', JSON.stringify(history));
             renderHistory();
             
             alert('当前数据已保存至历史记录！');
-            // 可选：保存后是否自动清空当前面板（此处保持原样由用户决定是否重置）
         }
 
         // 读取并渲染历史记录
         function renderHistory() {
-            let history = JSON.parse(localStorage.getItem('bball_stats_history') || '[]');
+            let history = JSON.parse(localStorage.getItem('bball_stats_v2') || '[]');
             const container = document.getElementById('history-container');
 
             if (history.length === 0) {
@@ -243,9 +270,17 @@
             }
 
             container.innerHTML = history.map(h => {
-                let details = metrics.map(m => `${m.label}: <strong>${h.data[m.key]}</strong>`).join(' | ');
+                // 历史记录中显示格式：进球: 1 (50%)
+                let details = metrics.map(m => {
+                    let s = h.data[m.key].success;
+                    let f = h.data[m.key].fail;
+                    let t = s + f;
+                    let p = t === 0 ? "0.0" : ((s / t) * 100).toFixed(1);
+                    return `${m.label}: <strong>${s}</strong> <span style="font-size:12px;color:#888;">(${p}%)</span>`;
+                }).join(' | ');
+                
                 return `<div class="history-item">
-                    <div style="margin-bottom: 5px;">📅 ${h.date}</div>
+                    <div style="margin-bottom: 5px; color:#2563eb;">📅 ${h.date}</div>
                     <span style="font-size:14px; color:#555;">${details}</span>
                 </div>`;
             }).join('');
