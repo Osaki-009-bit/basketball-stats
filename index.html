@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>球员场上表现统计</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background-color: #f5f5f5; 
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 20px; 
+            color: #333; 
+        }
+        .stats-board { 
+            background: #fff; 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            margin-bottom: 20px; 
+            position: sticky;
+            top: 10px;
+        }
+        .stats-board h3 { 
+            margin-top: 0; 
+            text-align: center; 
+        }
+        .percentages { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 10px; 
+            justify-content: center; 
+        }
+        .percent-item { 
+            background: #e0f2fe; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+            font-size: 14px; 
+            color: #0369a1; 
+        }
+        .control-panel { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+        }
+        .control-item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #fff; 
+            padding: 10px 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+        }
+        .item-name { 
+            font-weight: bold; 
+            font-size: 16px; 
+            width: 70px; 
+        }
+        .item-value { 
+            font-size: 20px; 
+            font-weight: bold; 
+            width: 40px; 
+            text-align: center; 
+        }
+        .btn-group button { 
+            font-size: 18px; 
+            width: 45px; 
+            height: 40px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-left: 5px; 
+        }
+        .btn-plus { background: #10b981; color: white; }
+        .btn-minus { background: #ef4444; color: white; }
+        .actions { 
+            margin-top: 30px; 
+            display: flex; 
+            gap: 10px; 
+            justify-content: center; 
+        }
+        .action-btn { 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            color: white; 
+            width: 45%;
+        }
+        .btn-reset { background: #dc2626; }
+        .btn-save { background: #3b82f6; }
+        .history-section { 
+            margin-top: 30px; 
+            background: #fff; 
+            padding: 15px; 
+            border-radius: 8px; 
+        }
+        .history-item { 
+            border-bottom: 1px solid #eee; 
+            padding: 10px 0; 
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>比赛数据统计</h2>
+        <div id="current-date"></div>
+    </div>
+
+    <div class="stats-board">
+        <h3>实时各项占比率</h3>
+        <div class="percentages" id="percentage-container">
+            </div>
+    </div>
+
+    <div class="control-panel" id="controls-container">
+        </div>
+
+    <div class="actions">
+        <button class="action-btn btn-reset" onclick="triggerReset()">重置数据</button>
+        <button class="action-btn btn-save" onclick="saveHistory()">保存至历史记录</button>
+    </div>
+
+    <div class="history-section">
+        <h3>过往历史记录</h3>
+        <div id="history-container">暂无历史记录</div>
+    </div>
+
+    <script>
+        // 核心数据结构定义
+        const metrics = [
+            { key: 'goal', label: '进球' },
+            { key: 'steal', label: '抢断' },
+            { key: 'rebound', label: '篮板' },
+            { key: 'pass', label: '传球' },
+            { key: 'turnover', label: '失误' },
+            { key: 'dribble', label: '运球' },
+            { key: 'gotStealed', label: '被抢断' }
+        ];
+
+        let stats = {};
+        metrics.forEach(m => stats[m.key] = 0);
+
+        // 初始化日期显示
+        document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', { 
+            year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' 
+        });
+
+        // 渲染操作面板UI
+        function renderControls() {
+            const container = document.getElementById('controls-container');
+            container.innerHTML = '';
+            metrics.forEach(m => {
+                container.innerHTML += `
+                    <div class="control-item">
+                        <div class="item-name">${m.label}</div>
+                        <div class="item-value" id="val-${m.key}">${stats[m.key]}</div>
+                        <div class="btn-group">
+                            <button class="btn-minus" onclick="updateStat('${m.key}', -1)">-1</button>
+                            <button class="btn-plus" onclick="updateStat('${m.key}', 1)">+1</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // 处理 +1 和 -1 的数据逻辑
+        function updateStat(key, delta) {
+            stats[key] += delta;
+            // 防止数据出现负数
+            if (stats[key] < 0) stats[key] = 0; 
+            document.getElementById(`val-${key}`).innerText = stats[key];
+            updatePercentages();
+        }
+
+        // 更新顶部百分比统计
+        function updatePercentages() {
+            const container = document.getElementById('percentage-container');
+            let totalOperations = Object.values(stats).reduce((a, b) => a + b, 0);
+
+            if (totalOperations === 0) {
+                container.innerHTML = '<span style="color:#888;">发生统计动作后显示占比</span>';
+                return;
+            }
+
+            container.innerHTML = metrics.map(m => {
+                let percent = ((stats[m.key] / totalOperations) * 100).toFixed(1);
+                return `<div class="percent-item">${m.label}: ${percent}%</div>`;
+            }).join('');
+        }
+
+        // 两次确认重置逻辑
+        function triggerReset() {
+            if (confirm('【第一次确认】确定要重置当前页面上的所有统计数据吗？')) {
+                if (confirm('【第二次确认】警告：点击确定将清零所有未保存的实时数据，此操作无法撤销。是否彻底重置？')) {
+                    metrics.forEach(m => stats[m.key] = 0);
+                    renderControls();
+                    updatePercentages();
+                }
+            }
+        }
+
+        // 保存到本地存储(历史记录)
+        function saveHistory() {
+            let total = Object.values(stats).reduce((a, b) => a + b, 0);
+            if(total === 0) {
+                alert('当前没有数据，无需保存！');
+                return;
+            }
+
+            let history = JSON.parse(localStorage.getItem('bball_stats_history') || '[]');
+            let record = {
+                date: new Date().toLocaleString('zh-CN'),
+                data: { ...stats }
+            };
+            // 将最新记录插入到数组最前面
+            history.unshift(record);
+            localStorage.setItem('bball_stats_history', JSON.stringify(history));
+            renderHistory();
+            
+            alert('当前数据已保存至历史记录！');
+            // 可选：保存后是否自动清空当前面板（此处保持原样由用户决定是否重置）
+        }
+
+        // 读取并渲染历史记录
+        function renderHistory() {
+            let history = JSON.parse(localStorage.getItem('bball_stats_history') || '[]');
+            const container = document.getElementById('history-container');
+
+            if (history.length === 0) {
+                container.innerHTML = '<span style="color:#888;">暂无历史记录</span>';
+                return;
+            }
+
+            container.innerHTML = history.map(h => {
+                let details = metrics.map(m => `${m.label}: <strong>${h.data[m.key]}</strong>`).join(' | ');
+                return `<div class="history-item">
+                    <div style="margin-bottom: 5px;">📅 ${h.date}</div>
+                    <span style="font-size:14px; color:#555;">${details}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // 页面加载时的初始调用
+        renderControls();
+        updatePercentages();
+        renderHistory();
+    </script>
+</body>
+</html>
